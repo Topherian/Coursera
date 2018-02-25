@@ -1,4 +1,5 @@
 import java.security.PublicKey;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -143,8 +144,43 @@ public class TxHandler {
      * transaction for correctness, returning a mutually valid array of accepted transactions, and
      * updating the current UTXO pool as appropriate.
      */
+    /*
+     * handleTxs should also update its internal UTXOPool to reflect the current set of unspent
+     * transaction outputs, so that future calls to handleTxs() and isValidTx() are able to
+     * correctly process/validate transactions that claim outputs from transactions that were
+     * accepted in a previous call to  handleTxs() .
+     */
     public Transaction[] handleTxs(Transaction[] possibleTxs) {
-        return possibleTxs;
+        ArrayList<Transaction> validTransactions = new ArrayList<>();
+        ArrayList<Transaction> reTryTransactions = new ArrayList<>();
+        for (int i = 0; i <= possibleTxs.length; i++) {
+            if (isValidTx(possibleTxs[i])) {
+                Transaction processTransaction = possibleTxs[i];
+                updatePool(processTransaction);
+                validTransactions.add(processTransaction);
+            }
+            //retry later as they are unordered transactions.
+            else {
+                reTryTransactions.add(possibleTxs[i]);
+            }
+        }
+        for (Transaction retryTransaction : reTryTransactions) {
+            if (isValidTx(retryTransaction)) {
+                updatePool(retryTransaction);
+                validTransactions.add(retryTransaction);
+            }
+        }
+        return validTransactions.toArray(new Transaction[validTransactions.size()]);
+    }
+
+    private void updatePool(Transaction validTransaction) {
+
+        ArrayList<Transaction.Input> inputs = validTransaction.getInputs();
+
+        for (Transaction.Input txInput : inputs){
+            UTXO utxo = new UTXO(txInput.prevTxHash, txInput.outputIndex);
+            utxoPool.addUTXO(utxo, validTransaction.getOutput(txInput.outputIndex));
+        }
     }
 
 }
