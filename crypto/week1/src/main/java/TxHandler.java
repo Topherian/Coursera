@@ -100,18 +100,29 @@ public class TxHandler {
             if (txInput.outputIndex >= 0 && txInput.prevTxHash.length > 0) {
                 UTXO utxo = new UTXO(txInput.prevTxHash, txInput.outputIndex);
                 if (utxoPool.contains(utxo)) {
-
-                    PublicKey publicKey = utxoPool.getTxOutput(utxo).address;
-                    byte[] message = tx.getRawDataToSign(i);
-                    byte[] signature = txInput.signature;
-                    if (publicKey != null && message != null && signature != null && message.length > 0
-                            && signature.length > 0) {
-                        isValid = Crypto.verifySignature(publicKey, message, signature);
-                        if (!isValid) {
+                    if (utxoPool.getTxOutput(utxo) != null) {
+                        Transaction.Output tOutput = utxoPool.getTxOutput(utxo);
+                        if (tOutput.address != null) {
+                            PublicKey publicKey = tOutput.address;
+                            if (tx.getRawDataToSign(i) != null) {
+                                byte[] message = tx.getRawDataToSign(i);
+                                byte[] signature = txInput.signature;
+                                if (publicKey != null && message != null && signature != null && message.length > 0
+                                        && signature.length > 0) {
+                                    isValid = Crypto.verifySignature(publicKey, message, signature);
+                                    if (!isValid) {
+                                        return false;
+                                    }
+                                } else {
+                                    return false;
+                                }
+                            } else {
+                                return false;
+                            }
+                        } else {
                             return false;
                         }
-                    }
-                    else {
+                    } else {
                         return false;
                     }
                 } else {
@@ -153,7 +164,7 @@ public class TxHandler {
     public Transaction[] handleTxs(Transaction[] possibleTxs) {
         ArrayList<Transaction> validTransactions = new ArrayList<>();
         ArrayList<Transaction> reTryTransactions = new ArrayList<>();
-        for (int i = 0; i <= possibleTxs.length; i++) {
+        for (int i = 0; i < possibleTxs.length; i++) {
             if (isValidTx(possibleTxs[i])) {
                 Transaction processTransaction = possibleTxs[i];
                 updatePool(processTransaction);
@@ -182,5 +193,6 @@ public class TxHandler {
             utxoPool.addUTXO(utxo, validTransaction.getOutput(txInput.outputIndex));
         }
     }
+
 
 }
