@@ -164,33 +164,81 @@ public class TxHandler {
     public Transaction[] handleTxs(Transaction[] possibleTxs) {
         ArrayList<Transaction> validTransactions = new ArrayList<>();
         ArrayList<Transaction> reTryTransactions = new ArrayList<>();
+        Set<UTXO> utxoSet = new HashSet<>();
         for (int i = 0; i < possibleTxs.length; i++) {
             if (isValidTx(possibleTxs[i])) {
                 Transaction processTransaction = possibleTxs[i];
-                updatePool(processTransaction);
-                validTransactions.add(processTransaction);
+                if (!checkDoubleSpend(utxoSet, processTransaction)) {
+                    updatePool(processTransaction);
+                    validTransactions.add(processTransaction);
+                }
             }
-            //retry later as they are unordered transactions.
+            //retry later as they are unordered transactions, and some transactions might depend
+            //on others.
             else {
                 reTryTransactions.add(possibleTxs[i]);
             }
         }
-        for (Transaction retryTransaction : reTryTransactions) {
-            if (isValidTx(retryTransaction)) {
-                updatePool(retryTransaction);
-                validTransactions.add(retryTransaction);
+        processFailedTransactions(true, reTryTransactions, validTransactions);
+
+        return validTransactions.toArray(new Transaction[validTransactions.size()]);
+    }
+
+    private boolean checkDoubleSpend(Set<UTXO> utxoSet, Transaction transaction) {
+
+        for (Transaction.Input txInput : transaction.getInputs()) {
+            UTXO utxo = new UTXO(txInput.prevTxHash, txInput.outputIndex);
+            if (!utxoSet.contains(utxo)) {
+                utxoSet.add(utxo);
+            }
+            else {
+                return true; // double spend if there is a utxo already in the set
             }
         }
-        return validTransactions.toArray(new Transaction[validTransactions.size()]);
+        return false;
+    }
+
+    private ArrayList<Transaction> processFailedTransactions(boolean retry, ArrayList<Transaction> failedTransactions,
+                                                             ArrayList<Transaction> validTransactions) {
+
+        ArrayList<Transaction> retryTransactions = new ArrayList<>();
+        boolean poolUpdated = false;
+
+        if (!retry) {
+            return validTransactions;
+        }
+        else {
+            for (Transaction retryTransaction : failedTransactions) {
+                if (isValidTx(retryTransaction)) {
+                    updatePool(retryTransaction);
+                    validTransactions.add(retryTransaction);
+                    poolUpdated = true;
+                }
+                else {
+                    retryTransactions.add(retryTransaction);
+                }
+            }
+            if (poolUpdated) {
+                processFailedTransactions(true, failedTransactions, validTransactions);
+            }
+            else {
+                processFailedTransactions(false, failedTransactions, validTransactions);
+            }
+        }
+        return validTransactions;
     }
 
     private void updatePool(Transaction validTransaction) {
 
         ArrayList<Transaction.Input> inputs = validTransaction.getInputs();
-
+        
         for (Transaction.Input txInput : inputs){
-            UTXO utxo = new UTXO(txInput.prevTxHash, txInput.outputIndex);
-            utxoPool.addUTXO(utxo, validTransaction.getOutput(txInput.outputIndex));
+            UTXO removeUtxo = new UTXO(txInput.prevTxHash, txInput.outputIndex); // passes test 15
+            utxoPool.removeUTXO(removeUtxo);
+        }
+        for (int i = 0; i < validTransaction.getOutputs().size(); i++) {
+            UTXO utxo = new UTXO(validTransaction.getHash(), i);
+            utxoPool.addUTXO(utxo, validTransaction.getOutput(i));
         }
     }
 
