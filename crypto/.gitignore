@@ -1,0 +1,13 @@
+*/*.iml
+*/*.iml
+*.iml
+.idea
+.idea/*
+.idea/*.*
+.gradle
+.gradle/*
+.gradle/*.*
+/build/*
+/build/*.*
+/out/*
+/out/*.*
